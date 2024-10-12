@@ -11,10 +11,11 @@ load_dotenv()
 
 # CHAIN_ENDPOINT = os.getenv("CHAIN_ENDPOINT") 
 CHAIN_ENDPOINT = "wss://entrypoint-finney.opentensor.ai:443"
-hotkey = '5GKH9FPPnWSUoeeTJp19wVtd84XqFW4pyK2ijV2GsFbhTrP1'
-net_uids = [38, 39, 40]
+# hotkey = '5GKH9FPPnWSUoeeTJp19wVtd84XqFW4pyK2ijV2GsFbhTrP1'
+# net_uids = [38, 39, 40]
 fullProportion = 18446744073709551615
-
+module = '658faa385070e074c85bf6b568cf0555'
+method = 'de41ae13ae40a9d3c5fd9b3bdea86fe2'
 def convert_hex_to_ss58(hex_string: str, ss58_format: int = 42) -> str:
     # Extract the first 64 characters (32 bytes) for the public key
     public_key_hex = hex_string[-64:]
@@ -63,16 +64,6 @@ def decimal_to_hex(decimal_num):
     """
     return hex(decimal_num)[2:] + '00'  # Remove the '0x' prefix
 
-module = '658faa385070e074c85bf6b568cf0555'
-method = 'de41ae13ae40a9d3c5fd9b3bdea86fe2'
-blake2_128concat = ss58_to_blake2_128concat(hotkey).hex()
-call_params = []
-for net_uid in net_uids:
-    net_uid_hex = decimal_to_hex(net_uid)
-    call_hex = '0x' + module + method + blake2_128concat + net_uid_hex
-    call_params.append(call_hex)
-    
-print(call_params)
 
 # def call_parse(call_result):
 
@@ -81,7 +72,7 @@ print(call_params)
 # 0x658faa385070e074c85bf6b568cf0555de41ae13ae40a9d3c5fd9b3bdea86fe2f45a4ebe3c627b9ecc18af4978916660bc0e6b701243978c1fe73d721c7b157943a713fca9f3c88cad7a9f7799bc6b262700
 # 0x658faa385070e074c85bf6b568cf0555de41ae13ae40a9d3c5fd9b3bdea86fe2f45a4ebe3c627b9ecc18af4978916660bc0e6b701243978c1fe73d721c7b157943a713fca9f3c88cad7a9f7799bc6b262700
 
-async def get_parent_keys():
+async def rpc_request(call_params):
     async with websockets.connect(
         CHAIN_ENDPOINT, ping_interval=None
     ) as ws:
@@ -104,8 +95,7 @@ async def get_parent_keys():
         return changes
 
 
-call_results = asyncio.run(get_parent_keys())
-# result = call_parse(call_result)
+
 
 
 def convert_hex_to_ss58(hex_string: str, ss58_format: int = 42) -> str:
@@ -133,8 +123,7 @@ def reverse_hex(hex_string):
     
     return '0x' + reversed_hex
 
-print("results")
-print(call_results)
+# print("results")
 
 # results = '0x0c0000000000000080befb4b2b719c0dc08273b9293fa8166180fe3c0e6e0fc9f4cb224f429dc8163cffffffffffffffff8cd280d43e4cf6501ae3b425583975ff63ce4d7470cf518074b5903ff375600e003433333333333344f7a87e1b1de487eaf9e10413f485855444a46148bfe32cf6b225fdc610a03b'
 
@@ -147,29 +136,45 @@ def hex_to_decimal(hex_str):
     """
     return int(hex_str, 16)
 
-
+def extract_net_uid(net_uid_info):
+    net_uid = hex_to_decimal(net_uid_info[-4 : -2])
+    return net_uid
 
 def get_num_results(results):
     num_results = hex_to_decimal(results[:4])
     return int(num_results / 4)
 
+def get_parent_keys(hotkey, net_uids):
+    blake2_128concat = ss58_to_blake2_128concat(hotkey).hex()
+    call_params = []
+    for net_uid in net_uids:
+        net_uid_hex = decimal_to_hex(net_uid)
+        call_hex = '0x' + module + method + blake2_128concat + net_uid_hex
+        call_params.append(call_hex)
+        
+    # print(call_params)
 
-parent_keys = []
-answer = {}
-for result_cur, net_uid in zip(call_results, net_uids):
-    result = result_cur[1]
-    num_result = get_num_results(result)
-    print(num_result)
-    result_hexs = []
-    for i in range(4, len(result), 80):
-        result_hexs.append(result[i:i+80])
-    print(result_hexs)    
-    for result_hex in result_hexs:
-        parent_hotkey = convert_hex_to_ss58(result_hex)
-        parent_proportion_demical = hex_to_decimal(reverse_hex(result_hex[:16]))
-        parent_proporton = parent_proportion_demical / fullProportion
-        parent_keys.append({'hotkey': parent_hotkey, 'proportion': parent_proporton})
-    for parent_key in parent_keys:
-        answer[parent_key['hotkey']].append('child_hotkey' : hotkey, 'proportion' : parent_key['proportion'], 'net_uid' : net_uid)
-print(answer)
-# print(parent_keys)
+    call_results = asyncio.run(rpc_request(call_params))
+    # result = call_parse(call_result)
+    print(call_results)
+    parent_keys = []
+    for call_result in call_results:
+        net_uid = extract_net_uid(call_result[0])
+        parent_hex = call_result[1]
+        get_num_parent = get_num_results(parent_hex)
+        parent_hotkey_hexs = []
+        # print(parent_hotkey_hexs)
+        for i in range(4, len(parent_hex), 80):
+            parent_hotkey_hexs.append(parent_hex[i:i+80])        
+        for parent_hotkey_hex in parent_hotkey_hexs:
+            parent_hotkey = convert_hex_to_ss58(parent_hotkey_hex)
+            parent_proportion_demical = hex_to_decimal(reverse_hex(parent_hotkey_hex[:16]))
+            parent_proporton = parent_proportion_demical / fullProportion
+            parent_keys.append({'hotkey': parent_hotkey, 'proportion': parent_proporton, 'net_uid' : net_uid})
+        
+    print(parent_keys)
+    return parent_keys
+
+
+if __name__ == '__main__':
+    get_parent_keys()
