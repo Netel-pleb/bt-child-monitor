@@ -66,9 +66,10 @@ class RPCRequest:
         :param decimal_num: Decimal number (e.g., 612345678901234567)
         :return: Hexadecimal string
         """
-        return hex(decimal_num)[2:] + '00'  # Remove the '0x' prefix
+        hex_str = hex(decimal_num)[2:] + '00'  # Remove the '0x' prefix
+        return hex_str.zfill(4) # Fill with leading zeros to ensure 4 digits
 
-    async def call_rpc(call_params):
+    async def call_rpc(self, call_params):
         async with websockets.connect(
             CHAIN_ENDPOINT, ping_interval=None
         ) as ws:
@@ -130,6 +131,7 @@ class RPCRequest:
         return int(num_results / 4)
 
     def get_parent_keys(self, hotkey, net_uids):
+        print("hotkey = ", hotkey, net_uids)
         blake2_128concat = self.ss58_to_blake2_128concat(hotkey).hex()
         call_params = []
         for net_uid in net_uids:
@@ -140,20 +142,22 @@ class RPCRequest:
         call_results = asyncio.run(self.call_rpc(call_params))
         # result = call_parse(call_result)
         parent_keys = []
+        print (call_results)
+
         for call_result in call_results:
-            net_uid = self.extract_net_uid(call_result[0])
-            parent_hex = call_result[1]
-            get_num_parent = self.get_num_results(parent_hex)
-            parent_hotkey_hexs = []
-            # print(parent_hotkey_hexs)
-            for i in range(4, len(parent_hex), 80):
-                parent_hotkey_hexs.append(parent_hex[i:i+80])
-            for parent_hotkey_hex in parent_hotkey_hexs:
-                parent_hotkey = self.convert_hex_to_ss58(parent_hotkey_hex)
-                parent_proportion_demical = self.hex_to_decimal(self.reverse_hex(parent_hotkey_hex[:16]))
-                parent_proporton = parent_proportion_demical / self.fullProportion
-                parent_keys.append({'hotkey': parent_hotkey, 'proportion': parent_proporton, 'net_uid' : net_uid})
-            
+            if call_result[1] is not None:
+                net_uid = self.extract_net_uid(call_result[0])
+                parent_hex = call_result[1]
+                parent_hotkey_hexs = []
+                # print(parent_hotkey_hexs)
+                for i in range(4, len(parent_hex), 80):
+                    parent_hotkey_hexs.append(parent_hex[i:i+80])
+                for parent_hotkey_hex in parent_hotkey_hexs:
+                    parent_hotkey = self.convert_hex_to_ss58(parent_hotkey_hex)
+                    parent_proportion_demical = self.hex_to_decimal(self.reverse_hex(parent_hotkey_hex[:16]))
+                    parent_proporton = parent_proportion_demical / self.fullProportion
+                    parent_keys.append({'hotkey': parent_hotkey, 'proportion': parent_proporton, 'net_uid' : net_uid})
+                
         # print(parent_keys)
         return parent_keys
 

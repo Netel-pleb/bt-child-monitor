@@ -4,6 +4,11 @@ import os
 import logging
 from child_monitor.utils.get_parentkey import RPCRequest
 load_dotenv()
+import sys
+
+# Redirect standard output to a file
+sys.stdout = open('output.txt', 'w')
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,20 +43,20 @@ class Validator:
     def __hash__(self):
         return hash((self.coldkey, self.hotkey))
     
-    def add_parentkeys(self, parent_hotkey, stake, net_uid):
+    def add_parentkeys(self, parent_hotkey, proportion, net_uid):
         # Method to add a childkey dictionary to the childkeys list
         parnetkey_info = {
-            'child_hotkey': parent_hotkey,
-            'stake': stake,
+            'parent_key': parent_hotkey,
+            'proportion': proportion,
             'net_uid': net_uid
         }
         self.parentkeys.append(parnetkey_info) 
         
-    def add_childkey(self, child_hotkey, stake, net_uid):
+    def add_childkeys(self, child_hotkey, proportion, net_uid):
         # Method to add a childkey dictionary to the childkeys list
         childkey_info = {
             'child_hotkey': child_hotkey,
-            'stake': stake,
+            'proportion': proportion,
             'net_uid': net_uid
         }
         self.childkeys.append(childkey_info)
@@ -76,30 +81,35 @@ def get_all_validators(subnet_net_uids, subtensor):
     for netuid in subnet_net_uids:
         subnet_validators = get_subnet_validators(netuid, subtensor)
         for validator in subnet_validators:
-            if validator in all_validators:
-                all_validators[validator].parentkey_netuids.extend(uid for uid in validator.parentkey_netuids if uid not in all_validators[validator].parentkey_netuids)
-            else:
+            if validator not in all_validators:
                 all_validators[validator] = validator
     return list(all_validators.values())
 
 def get_subnet_uids(subtensor):
     try:
         subnet_uids = subtensor.get_subnets()
-        logging.info(f"Subnet UIDs: {subnet_uids}")
         return subnet_uids
     except Exception as e:
         logging.error(f"Error retrieving subnet UIDs: {e}")
         return []
 
 if __name__ == "__main__":
+    print("Hello")
+    # exit(0)
     all_validators = []
     subnet_uids = get_subnet_uids(subtensor)
-    subnet_uids = [1, 2]
+    subnet_uids.remove(0)
+    logging.info(f"Subnet UIDs: {subnet_uids}")
+    # subnet_uids = [39, 40]
     all_validators = get_all_validators(subnet_uids, subtensor)
     for validator in all_validators:
         logging.info(f"Validator: {validator.__dict__}")
+        
+    
     for validator in all_validators:
-        parent_keys = GetParentKeys.get_parent_keys(validator.hotkey, validator.parentkey_netuids)
+        logging.info(f"Validator: {validator.__dict__}")
+        parent_keys = GetParentKeys.get_parent_keys(validator.hotkey, subnet_uids)
+        print(parent_keys)
         for parent_key in parent_keys:
             validator.add_parentkeys(parent_key['hotkey'], parent_key['proportion'], parent_key['net_uid'])
             
@@ -111,9 +121,11 @@ if __name__ == "__main__":
                 all_validators.append(parent_validator)
 
             # Add the current validator's hotkey as a childkey to the parent validator
-            parent_validator.add_childkeys(validator.hotkey)
+            parent_validator.add_childkeys(validator.hotkey, parent_key['proportion'], parent_key['net_uid'])
         
-    
+    print("\nAll Validators after adding parent and child keys:")
+    for validator in all_validators:
+        print(validator.__dict__)
 
 
 

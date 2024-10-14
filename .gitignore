@@ -4,3 +4,5 @@ path/to/venv/
 */*/__pycache__/
 .env
 /venv/
+/test
+/test-cur
