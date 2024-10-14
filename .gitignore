@@ -5,5 +5,5 @@ path/to/venv/
 .env
 /venv/
 test.py
-test-cur.py
+test_cur.py
 output.txt

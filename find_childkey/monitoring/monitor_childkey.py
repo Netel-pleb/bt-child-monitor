@@ -1,23 +1,37 @@
+import os
+import sys
+import logging
+import json
+import django
+from django.core.management import call_command
+from django.db import connection
 import bittensor as bt
 from dotenv import load_dotenv
-import os
-import logging
-from child_monitor.utils.get_parentkey import RPCRequest
+from find_childkey.utils.get_parentkey import RPCRequest
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bt_childkey_monitor.settings')
+django.setup()
+from validators.models import Validators
+
+# Load environment variables
 load_dotenv()
-import sys
+
+# Set the Django settings module
+
+
+# Initialize Django
+
 
 # Redirect standard output to a file
 sys.stdout = open('output.txt', 'w')
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-subtensorModule = '658faa385070e074c85bf6b568cf0555' # fex code for SubtensorModule call_module
-parentKeys = 'de41ae13ae40a9d3c5fd9b3bdea86fe2' # fex code for parentkeys call_function
+subtensorModule = '658faa385070e074c85bf6b568cf0555'  # fex code for SubtensorModule call_module
+parentKeys = 'de41ae13ae40a9d3c5fd9b3bdea86fe2'  # fex code for parentkeys call_function
 
 GetParentKeys = RPCRequest(subtensorModule, parentKeys)
-
 
 # Retrieve chain endpoint from environment variables
 chain_endpoint = os.getenv("CHAIN_ENDPOINT")
@@ -27,41 +41,22 @@ if not chain_endpoint:
 # Initialize Subtensor
 subtensor = bt.Subtensor(network=chain_endpoint)
 
-class Validator:
-    def __init__(self, coldkey, hotkey, stake):
-        self.coldkey = coldkey
-        self.hotkey = hotkey
-        self.stake = stake
-        self.parentkey_netuids = []
-        self.childkeys = []
-        self.parentkeys = []
+def delete_database_file():
+    print("Deleting database file")
+    # db_path = os.path.join(os.path.dirname(__file__), 'db.sqlite3')
+    db_path = '/Users/mac/Documents/work/Rhef/bt-child-monitor/db/db.sqlite3'
+    print(db_path)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        print("Deleted database file")
+    else:
+        print("Database file does not exist, skipping deletion")
 
-    def __eq__(self, other):
-        return (self.coldkey == other.coldkey and
-                self.hotkey == other.hotkey)
+def recreate_validators_table():
+    call_command('makemigrations')
+    call_command('migrate')
+    print("Recreated validators_validators table")
 
-    def __hash__(self):
-        return hash((self.coldkey, self.hotkey))
-    
-    def add_parentkeys(self, parent_hotkey, proportion, net_uid):
-        # Method to add a childkey dictionary to the childkeys list
-        parnetkey_info = {
-            'parent_key': parent_hotkey,
-            'proportion': proportion,
-            'net_uid': net_uid
-        }
-        self.parentkeys.append(parnetkey_info) 
-        
-    def add_childkeys(self, child_hotkey, proportion, net_uid):
-        # Method to add a childkey dictionary to the childkeys list
-        childkey_info = {
-            'child_hotkey': child_hotkey,
-            'proportion': proportion,
-            'net_uid': net_uid
-        }
-        self.childkeys.append(childkey_info)
-    
-# 5F953EH5EVc9BUKYLhktAdzH1waVdgEtwyh5ygTrwCuJkwML
 def get_subnet_validators(netuid, subtensor):
     big_validators = {}
     metagraph = subtensor.metagraph(netuid)
@@ -71,8 +66,10 @@ def get_subnet_validators(netuid, subtensor):
     coldkeys = metagraph.coldkeys
     for i in range(len(neuron_uids)):
         if stakes[i] > 1000:
-            validator = Validator(coldkeys[i], hotkeys[i], stakes[i])
-            validator.parentkey_netuids.append(netuid)
+            validator = Validators(coldkey=coldkeys[i], hotkey=hotkeys[i], stake=stakes[i])
+            parentkey_netuids = validator.get_parentkey_netuids()  # Deserialize JSON to list
+            parentkey_netuids.append(netuid)
+            validator.parentkey_netuids = json.dumps(parentkey_netuids)  # Serialize back to JSON
             big_validators[validator] = validator
     return list(big_validators.values())
 
@@ -94,22 +91,26 @@ def get_subnet_uids(subtensor):
         return []
 
 if __name__ == "__main__":
+
+    # Delete the database file if it exists
+    delete_database_file()
+
+    # Recreate the validators_validators table
+    recreate_validators_table()
+
     print("Hello")
-    # exit(0)
-    all_validators = []
     subnet_uids = get_subnet_uids(subtensor)
-    subnet_uids.remove(0)
-    logging.info(f"Subnet UIDs: {subnet_uids}")
-    # subnet_uids = [39, 40]
+    subnet_uids.remove(0)    
+    # subnet_uids = [31, 33, 37]
     all_validators = get_all_validators(subnet_uids, subtensor)
     for validator in all_validators:
         logging.info(f"Validator: {validator.__dict__}")
-        
-    
-    for validator in all_validators:
+
+    for validator in all_validators:     
         logging.info(f"Validator: {validator.__dict__}")
         parent_keys = GetParentKeys.get_parent_keys(validator.hotkey, subnet_uids)
         print(parent_keys)
+
         for parent_key in parent_keys:
             validator.add_parentkeys(parent_key['hotkey'], parent_key['proportion'], parent_key['net_uid'])
             
@@ -117,16 +118,21 @@ if __name__ == "__main__":
 
             if parent_validator is None:
                 # If parent validator does not exist, create a new Validator instance
-                parent_validator = Validator(coldkey='', hotkey=parent_key['hotkey'], stake=0)
+                parent_validator = Validators(coldkey='', hotkey=parent_key['hotkey'], stake=0)
                 all_validators.append(parent_validator)
 
             # Add the current validator's hotkey as a childkey to the parent validator
             parent_validator.add_childkeys(validator.hotkey, parent_key['proportion'], parent_key['net_uid'])
-        
+
     print("\nAll Validators after adding parent and child keys:")
     for validator in all_validators:
         print(validator.__dict__)
-
-
-
-
+        validator_model, created = Validators.objects.update_or_create(
+            hotkey=validator.hotkey,
+            defaults={
+                'coldkey': validator.coldkey,
+                'stake': validator.stake,
+                'parentkeys': json.dumps(validator.parentkeys),  # Serialize to JSON
+                'childkeys': json.dumps(validator.childkeys)   # Serialize to JSON
+            }
+        )
