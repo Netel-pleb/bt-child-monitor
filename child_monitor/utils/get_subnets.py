@@ -1,8 +1,6 @@
 import bittensor as bt
 from dotenv import load_dotenv
-import os
 
-load_dotenv()
 from substrateinterface import SubstrateInterface
 
 
