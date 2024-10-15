@@ -10,22 +10,15 @@ from dotenv import load_dotenv
 from find_childkey.utils.get_parentkey import RPCRequest
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bt_childkey_monitor.settings')
-django.setup()
-from validators.models import Validators
 
-# Load environment variables
+django.setup()
+
+from validators.models import Validators, ValidatorChildKeyInfo
+
 load_dotenv()
 
-# Set the Django settings module
-
-
-# Initialize Django
-
-
-# Redirect standard output to a file
 sys.stdout = open('output.txt', 'w')
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 
 subtensorModule = '658faa385070e074c85bf6b568cf0555'  # fex code for SubtensorModule call_module
@@ -38,12 +31,10 @@ chain_endpoint = os.getenv("CHAIN_ENDPOINT")
 if not chain_endpoint:
     raise ValueError("CHAIN_ENDPOINT environment variable is not set.")
 
-# Initialize Subtensor
 subtensor = bt.Subtensor(network=chain_endpoint)
 
 def delete_database_file():
     print("Deleting database file")
-    # db_path = os.path.join(os.path.dirname(__file__), 'db.sqlite3')
     db_path = '/Users/mac/Documents/work/Rhef/bt-child-monitor/db/db.sqlite3'
     print(db_path)
     if os.path.exists(db_path):
@@ -90,18 +81,37 @@ def get_subnet_uids(subtensor):
         logging.error(f"Error retrieving subnet UIDs: {e}")
         return []
 
+def create_validator_childkey_tables(parent_validators):
+    for validator in parent_validators:
+        parent_coldkey = validator.coldkey
+        parent_hotkey = validator.hotkey
+        parent_stake = validator.stake
+        childkeys_info = validator.childkeys if isinstance(validator.childkeys, list) else json.loads(validator.childkeys)
+        if not childkeys_info:
+            continue
+        for child_info in childkeys_info:
+            ValidatorChildKeyInfo.objects.create(
+                parent_hotkey=validator,
+                parent_coldkey=parent_coldkey,
+                parent_stake=parent_stake,
+                child_hotkey=child_info['child_hotkey'],
+                # child_stake=child_info['proportion'],
+                stake_proportion=child_info['proportion'],
+                subnet_uid=child_info['net_uid']
+            )
+
+    print("Created entries for all parent validators")
+
 if __name__ == "__main__":
 
-    # Delete the database file if it exists
     delete_database_file()
 
-    # Recreate the validators_validators table
     recreate_validators_table()
 
-    print("Hello")
     subnet_uids = get_subnet_uids(subtensor)
+    
     subnet_uids.remove(0)    
-    # subnet_uids = [31, 33, 37]
+    # subnet_uids = [49, 50]
     all_validators = get_all_validators(subnet_uids, subtensor)
     for validator in all_validators:
         logging.info(f"Validator: {validator.__dict__}")
@@ -130,9 +140,17 @@ if __name__ == "__main__":
         validator_model, created = Validators.objects.update_or_create(
             hotkey=validator.hotkey,
             defaults={
-                'coldkey': validator.coldkey,
-                'stake': validator.stake,
-                'parentkeys': json.dumps(validator.parentkeys),  # Serialize to JSON
-                'childkeys': json.dumps(validator.childkeys)   # Serialize to JSON
-            }
-        )
+                        'coldkey': validator.coldkey,
+                        'stake': validator.stake,
+                        'parentkeys': json.dumps(validator.parentkeys),  # Serialize to JSON
+                        'childkeys': json.dumps(validator.childkeys)   # Serialize to JSON
+                    }
+                    )
+
+    # Create entries for all parent validators
+    create_validator_childkey_tables(all_validators)
+
+    # Run migrations after creating entries
+    call_command('makemigrations')
+    call_command('migrate')
+    print("Migrations completed")
