@@ -34,7 +34,6 @@ if __name__ == '__main__':
     
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
-    print(config)
     db_dir = config.get("DATABASE_DIR")
 
     create_db_directory(db_dir)  # Create a db directory at the specified path
