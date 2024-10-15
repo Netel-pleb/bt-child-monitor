@@ -1,12 +1,13 @@
 import os
-import subprocess
 import time
 import argparse
 import yaml
 from dotenv import load_dotenv
-import sys
 from find_parentkeys.parentkey_monitor.monitor_parentkey import monitor_parentkeys
+from find_parentkeys.utils.sentry import init_sentry
 
+load_dotenv()
+sentry_dsn = os.getenv("SENTRY_DSN")
 
 def create_db_directory(db_path):
     """Creates a db directory at the specified path if it doesn't exist."""
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     parser.add_argument("--interval", type=int, default=3600, help="Delay between runs in seconds.")
     args = parser.parse_args()
     
-    load_dotenv()
+    init_sentry(sentry_dsn)
     
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
