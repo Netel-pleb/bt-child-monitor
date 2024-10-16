@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code into the container
 COPY . .
 
-# Set environment variables (if any)
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
 
 # Define the entrypoint and default command
