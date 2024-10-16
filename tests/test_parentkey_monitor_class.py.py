@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from find_parentkeys.parentkey_monitor.monitor_parentkey import ParentkeyMonitor  # Replace with the actual import path
+from find_parentkeys.parentkey_monitor.monitor_parentkey import ParentkeyMonitor
 
 @pytest.fixture
 def config():

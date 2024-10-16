@@ -50,7 +50,6 @@ class ParentkeyMonitor:
         all_validators: Dict[HotkeyModel, HotkeyModel] = {}
         subnet_net_uids = self.get_subnet_uids(subtensor)
         subnet_net_uids.remove(0)  # Remove the root subnet
-        # subnet_net_uids = [1, 3]  # Example: specify subnets of interest
         
         for netuid in subnet_net_uids:
             subnet_validators = self.get_subnet_validators(netuid, subtensor)
@@ -62,7 +61,6 @@ class ParentkeyMonitor:
 
     def monitor_parentkeys(self) -> None:
         """Monitors parent keys and updates the database with the latest information."""
-        print("here1")
         full_proportion = self.config.get("FULL_PROPORTION")
         subtensor_call_module = self.config.get("SUBTENSORMODULE")
         parent_keys_call_function = self.config.get("PARENTKEYS_FUNCTION")
@@ -71,24 +69,19 @@ class ParentkeyMonitor:
 
         subtensor = bt.Subtensor(network=chain_endpoint)
         sdk_call = RPCRequest(chain_endpoint, full_proportion)
-        print(self.config)
         db_path = os.path.join(self.config.get("DATABASE_DIR"), 'db.sqlite3')
         db_manager = DataBaseManager(db_path)
-        print("here2")
         db_manager.delete_database_file()
         db_manager.migrate_db()
 
         all_validators, subnet_uids = self.get_all_validators_subnets(subtensor)
-        print("here 6")
         for validator in all_validators:
-            logging.info(f"Processing validator: {validator.hotkey}")
             validator.stake = sdk_call.get_stake_from_hotkey(
                 subtensor_call_module,
                 total_hotkey_stake_call_function,
                 validator.hotkey
             )
             validator.save()
-        print("here3")
         for validator in all_validators:
             parent_keys = sdk_call.get_parent_keys(
                 subtensor_call_module,
@@ -96,15 +89,12 @@ class ParentkeyMonitor:
                 validator.hotkey,
                 subnet_uids
             )
-            print("here4")
             self._process_parent_keys(parent_keys, validator)
 
     def _process_parent_keys(self, parent_keys: List[Dict], validator: HotkeyModel) -> None:
         """Process and save parent keys for a given validator."""
-        print("length of parents = ", len(parent_keys))
         for parent_key in parent_keys:
             parent_validator = self._get_or_create_parent_validator(parent_key)
-            print("\n\ncreated")
             ChildHotkeyModel.objects.create(
                 parent=parent_validator,
                 child=validator,
@@ -135,7 +125,6 @@ class ParentkeyMonitor:
             hotkey
         )
 
-# Example usage
 if __name__ == "__main__":
     config = {
         "FULL_PROPORTION": 18446744073709551615,
