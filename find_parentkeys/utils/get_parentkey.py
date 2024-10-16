@@ -42,7 +42,7 @@ class RPCRequest:
 
     def decimal_to_hex(self, decimal_num: int) -> str:
         """Convert decimal number to hexadecimal string."""
-        return hex(decimal_num)[2:].zfill(4) + '00'  # Ensure 4 digits
+        return (hex(decimal_num)[2:] + '00').zfill(4)  # Ensure 4 digits
 
     async def call_rpc(self, call_params: List[str]) -> List[Dict]:
         """Call the RPC and return the results."""

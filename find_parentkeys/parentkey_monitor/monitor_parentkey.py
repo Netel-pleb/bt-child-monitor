@@ -50,7 +50,7 @@ class ParentkeyMonitor:
         all_validators: Dict[HotkeyModel, HotkeyModel] = {}
         subnet_net_uids = self.get_subnet_uids(subtensor)
         subnet_net_uids.remove(0)  # Remove the root subnet
-        subnet_net_uids = [1, 3]  # Example: specify subnets of interest
+        # subnet_net_uids = [1, 3]  # Example: specify subnets of interest
         
         for netuid in subnet_net_uids:
             subnet_validators = self.get_subnet_validators(netuid, subtensor)
@@ -101,8 +101,10 @@ class ParentkeyMonitor:
 
     def _process_parent_keys(self, parent_keys: List[Dict], validator: HotkeyModel) -> None:
         """Process and save parent keys for a given validator."""
+        print("length of parents = ", len(parent_keys))
         for parent_key in parent_keys:
             parent_validator = self._get_or_create_parent_validator(parent_key)
+            print("\n\ncreated")
             ChildHotkeyModel.objects.create(
                 parent=parent_validator,
                 child=validator,
