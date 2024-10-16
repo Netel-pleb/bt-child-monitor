@@ -16,5 +16,8 @@ COPY . .
 # Set environment variables (if any)
 ENV PYTHONUNBUFFERED=1
 
-# Define the command to run the application
-CMD ["python", "main.py"]
+# Define the entrypoint and default command
+ENTRYPOINT ["python", "main.py"]
+CMD ["--interval", "3600", "config.yaml"]
+
+# docker run myimage --interval 7200 custom_config.yaml

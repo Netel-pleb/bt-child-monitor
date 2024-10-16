@@ -10,12 +10,23 @@ import os
 load_dotenv()
 
 class RPCRequest:
-    def __init__(self, chain_endpoint, call_module, call_function, FullProportion):
+    def __init__(self, chain_endpoint, FullProportion):
         self.chain_endpoint = chain_endpoint
         self.fullProportion = FullProportion
-        self.call_module = call_module
-        self.call_function = call_function
-            
+    
+    def convert_ss58_to_hex(self, ss58_address):
+        # Decode SS58 address to bytes
+        address_bytes = ss58_decode(ss58_address)
+        
+        # Ensure address_bytes is in bytes
+        if isinstance(address_bytes, str):
+            address_bytes = bytes.fromhex(address_bytes)
+        
+        # Convert bytes to hex string and add '0x' prefix
+        hex_address = address_bytes.hex()
+        
+        return hex_address
+                    
     def convert_hex_to_ss58(self, hex_string: str, ss58_format: int = 42) -> str:
         # Extract the first 64 characters (32 bytes) for the public key
         public_key_hex = hex_string[-64:]
@@ -30,17 +41,6 @@ class RPCRequest:
         # Convert to SS58 address with specified ss58_format
         keypair = Keypair(public_key=public_key, ss58_format=ss58_format)
         return keypair.ss58_address
-
-    def convert_ss58_to_hex(self, ss58_address):
-        # Decode SS58 address to bytes
-        address_str = ss58_decode(ss58_address)
-        
-        address_bytes = bytes(address_str, 'utf-8')
-        
-        # Convert bytes to hex string and add '0x' prefix
-        hex_address = '0x' + address_bytes.hex()
-        
-        return hex_address
 
     def ss58_to_blake2_128concat(self, ss58_address: str) -> bytes:
         # Decode the SS58 address to get the raw account ID
@@ -80,7 +80,6 @@ class RPCRequest:
             ignore = await ws.recv()  # ignore the first response since it's a just a confirmation
             response = await ws.recv()
             changes = json.loads(response)["params"]["result"]["changes"]
-            # print(changes)
             return changes
 
     def convert_hex_to_ss58(self, hex_string: str, ss58_format: int = 42) -> str:
@@ -125,26 +124,21 @@ class RPCRequest:
         num_results = self.hex_to_decimal(results[:4])
         return int(num_results / 4)
 
-    def get_parent_keys(self, hotkey, net_uids):
-        print("hotkey = ", hotkey, net_uids)
-        blake2_128concat = self.ss58_to_blake2_128concat(hotkey).hex()
+    def get_parent_keys(self, call_module, call_function, hotkey, net_uids):
         call_params = []
+        blake2_128concat = self.ss58_to_blake2_128concat(hotkey).hex()
         for net_uid in net_uids:
             net_uid_hex = self.decimal_to_hex(net_uid)
-            call_hex = '0x' + self.call_module + self.call_function + blake2_128concat + net_uid_hex
+            call_hex = '0x' + call_module + call_function + blake2_128concat + net_uid_hex
             call_params.append(call_hex)
-
         call_results = asyncio.run(self.call_rpc(call_params))
         # result = call_parse(call_result)
         parent_keys = []
-        print (call_results)
-
         for call_result in call_results:
             if call_result[1] is not None:
                 net_uid = self.extract_net_uid(call_result[0])
                 parent_hex = call_result[1]
                 parent_hotkey_hexs = []
-                # print(parent_hotkey_hexs)
                 for i in range(4, len(parent_hex), 80):
                     parent_hotkey_hexs.append(parent_hex[i:i+80])
                 for parent_hotkey_hex in parent_hotkey_hexs:
@@ -152,7 +146,19 @@ class RPCRequest:
                     parent_proportion_demical = self.hex_to_decimal(self.reverse_hex(parent_hotkey_hex[:16]))
                     parent_proportion = round(parent_proportion_demical / self.fullProportion, 4)
                     parent_keys.append({'hotkey': parent_hotkey, 'proportion': parent_proportion, 'net_uid' : net_uid})
-                
-        # print(parent_keys)
         return parent_keys
 
+    def get_stake_from_hotkey(self, call_module, call_function, hotkey):
+        call_params = []
+        hex_address = self.convert_ss58_to_hex(hotkey)
+        call_hex = '0x' + call_module + call_function + hex_address
+        call_params.append(call_hex)
+        call_results = asyncio.run(self.call_rpc(call_params))
+        if call_results[0][1] is not None:
+            stake_hex = call_results[0][1][2:]
+            stake = self.hex_to_decimal(self.reverse_hex(stake_hex))
+            return round(stake / 1e9, 4)
+        else:
+            return 0
+    
+    
