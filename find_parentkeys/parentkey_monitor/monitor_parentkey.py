@@ -55,8 +55,7 @@ class ParentkeyMonitor:
             for i in range(len(neuron_uids)):
                 if stakes[i] > 1000:
                     hotkey = HotkeyModel(
-                        hotkey = hotkeys[i], 
-                        stake = round(stakes[i], 4),
+                        hotkey = hotkeys[i],
                     )
                     big_validators[hotkey] = hotkey
         except Exception as e:
@@ -74,7 +73,7 @@ class ParentkeyMonitor:
         all_validators: Dict[HotkeyModel, HotkeyModel] = {}
         subnet_net_uids = self.get_subnet_uids(subtensor)
         subnet_net_uids.remove(0)  # Remove the root subnet
-        # subnet_net_uids = [1, 3, 21]  # Example: specify subnets of interest
+        # subnet_net_uids = [1, 3]  # Example: specify subnets of interest
 
         for netuid in subnet_net_uids:
             subnet_validators = self.get_subnet_validators(netuid, subtensor)
@@ -111,6 +110,7 @@ def monitor_parentkeys(config: Dict) -> None:
 
     all_validators, subnet_uids = parent_monitor.get_all_validators_subnets(subtensor)
     for validator in all_validators:
+        validator.stake = sdk_call.get_stake_from_hotkey(subtensor_call_module, total_hotkey_stake_call_function, validator.hotkey)
         validator.save()
         
     for validator in all_validators:
